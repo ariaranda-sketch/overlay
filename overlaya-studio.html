@@ -1,10 +1,9 @@
 <!doctype html>
 <!--
   OVERLAYA STUDIO
-  1. Open this file in Chrome or Edge to customize.
-  2. Click "Save overlay file" and open the saved file.
-  3. Copy each overlay's link into its own OBS Browser source (untick "Local file", paste into URL).
-  Each overlay is its own source, so you place and size it however you like in OBS.
+  Edit in the browser. Your changes are kept in this browser and built into each overlay link.
+  Copy a link and paste it into OBS, Streamlabs or TikTok LIVE Studio.
+  After changing anything, copy the link again and paste it over the old one.
 -->
 <html lang="en">
 <head>
@@ -297,9 +296,33 @@ body.studio{
 .bar{display:flex;align-items:center;gap:22px;padding:18px 28px;border-bottom:1px solid var(--line)}
 .bar .status{flex:1;font-size:15px;color:var(--soft)}
 .bar select{width:auto;padding:6px 0}
-.board{flex:1;overflow:auto;padding:26px 28px 34px;display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:24px;align-content:start}
+.board{flex:1;overflow:auto;padding:26px 28px 34px;display:grid;grid-template-columns:minmax(0,1fr);gap:26px;align-content:start}
+.board>*{max-width:1080px;width:100%;justify-self:center}
+.piece[data-piece="chat"] .pv{max-width:360px;margin:0 auto}
+.psettings{margin-top:20px;padding-top:18px;border-top:1px solid var(--line)}
+.psettings h4{margin:0 0 16px;font-size:15px;font-weight:600;letter-spacing:.02em;color:var(--soft)}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:4px 34px;align-items:start}
+.looks{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:6px}
+.lk{display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px 10px 13px;background:none;border:1px solid var(--line);border-radius:14px;
+  color:var(--ink);font:14px "Jost",Arial,sans-serif;cursor:pointer;text-align:center}
+.lk:hover{border-color:rgba(205,179,139,.5)}
+.lk:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.lk[aria-pressed="true"]{border-color:var(--gold);background:rgba(205,179,139,.12)}
+.lkmock{display:flex;align-items:center;gap:7px;height:46px;background:#3a3330;padding:0 12px 0 8px}
+.lkmock i{width:28px;height:28px;border-radius:50%;background:var(--gold);flex:none}
+.lkmock b{display:block;height:8px;width:62px;border-radius:4px;background:var(--ink)}
+.lkmock em{display:block;height:5px;width:40px;border-radius:3px;background:var(--soft);opacity:.7}
+.lkmock span{display:flex;flex-direction:column;gap:4px}
+.m-row{border-radius:999px}
+.m-compact{border-radius:999px;padding-right:16px}
+.m-full{border-radius:10px;padding:0 18px 0 12px;height:52px}
+.m-full u{display:block;width:3px;height:30px;border-radius:2px;background:var(--gold)}
+.m-full b{width:72px;height:10px}
 .piece{background:var(--side);border:1px solid var(--line);border-radius:18px;padding:18px 18px 16px}
-.piece.tall{grid-row:span 2}
+.piece{transition:border-color .25s ease,box-shadow .25s ease}
+.piece.editing{border-color:rgba(212,188,150,.75);box-shadow:0 0 0 1px rgba(212,188,150,.45),0 14px 36px rgba(0,0,0,.3)}
+.piece .etag{display:none;margin-left:8px;vertical-align:2px;font-size:12px;font-weight:600;letter-spacing:.04em;color:#1C1816;background:var(--gold);border-radius:999px;padding:2px 9px}
+.piece.editing .etag{display:inline-block}
 .piece header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:12px}
 .piece h3{margin:0;font-weight:600;font-size:17px}
 .piece .size{font-size:14px;color:var(--soft)}
@@ -316,7 +339,7 @@ body.studio{
 .trial .ghost{margin:0}
 .steps{grid-column:1 / -1;font-size:15px;line-height:1.65;color:var(--soft);margin:0}
 .steps b{color:var(--ink);font-weight:500}
-@media (max-width:1100px){ .board{grid-template-columns:1fr} .piece.tall{grid-row:auto} }
+@media (max-width:1100px){ .looks{grid-template-columns:1fr} }
 @media (max-width:860px){ body.studio{overflow:auto} .shell{grid-template-columns:1fr;height:auto} }
 @media (prefers-reduced-motion:reduce){ .ov *{transition-duration:.01s!important;animation-duration:.01s!important} }
 </style>
@@ -422,6 +445,15 @@ function normalizeProfile(p){
   return p;
 }
 /* Two separate sets of settings: OBS (Twitch and Facebook) and TikTok LIVE Studio */
+const LS_KEY = "overlaya-studio-v1";
+const HASH_HEAD = (location.hash || "").replace("#", "").split("&")[0].toLowerCase();
+const OVERLAY_MODE = /^(tiktok-)?(plug|chat|shoutout)$/.test(HASH_HEAD) || !!window.obsstudio;
+if (!OVERLAY_MODE){
+  try {
+    const saved = JSON.parse(localStorage.getItem(LS_KEY) || "null");
+    if (saved && saved.profiles){ saved.logos = Object.assign({}, STORE.logos || {}, saved.logos || {}); STORE = saved; }
+  } catch (e) {}
+}
 if (!STORE.profiles){
   const base = STORE;
   const logos = base.logos || {};
@@ -436,6 +468,28 @@ Object.entries(STORE.profiles).forEach(([k, p]) => { p.kind = k; normalizeProfil
 if (!STORE.profiles[STORE.active]) STORE.active = "obs";
 cfg = STORE.profiles[STORE.active];
 const PROFILE_NAMES = { obs: "Twitch and Facebook", tiktok: "TikTok" };
+
+/* ---------- settings travel inside each overlay link ---------- */
+const b64url = bytes => { let bin = ""; for (let i = 0; i < bytes.length; i += 8192) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 8192)); return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); };
+const unb64url = str => { const b = atob(str.replace(/-/g, "+").replace(/_/g, "/")); const out = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) out[i] = b.charCodeAt(i); return out; };
+async function packCfg(obj){
+  const json = JSON.stringify(obj);
+  if (window.CompressionStream){
+    const st = new Blob([json]).stream().pipeThrough(new CompressionStream("deflate-raw"));
+    return "z" + b64url(new Uint8Array(await new Response(st).arrayBuffer()));
+  }
+  return "j" + b64url(new TextEncoder().encode(json));
+}
+async function unpackCfg(str){
+  const bytes = unb64url(str.slice(1));
+  if (str[0] === "z"){
+    const st = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+    return JSON.parse(await new Response(st).text());
+  }
+  return JSON.parse(new TextDecoder().decode(bytes));
+}
+/* only what one overlay needs: this setup's settings, without built-in logos */
+const linkCfg = p => { const c = JSON.parse(JSON.stringify(p)); return c; };
 
 /* ---------- Overlaya Connect: direct TikTok LIVE connection by username ---------- */
 const TT_HOST = "wss://ws.eulerstream.com";
@@ -580,6 +634,15 @@ function createPiece(host, cfg, piece, opts = {}){
       .map(x => (opts.demo && !(x.handle || "").trim()) ? Object.assign(x, { handle: "@yourhandle" }) : x)
       .filter(x => x.info && x.info.name && (x.handle || "").trim())
       .filter(x => { const id = x.key === "other" ? "other:" + x.info.name.toLowerCase() : x.key; if (seen.has(id)) return false; seen.add(id); return true; });
+    const F = opts.focus || null;
+    const hold = !!(F && F.piece === "plug");
+    if (F && F.social != null){
+      const want = (c.socials || [])[F.social];
+      if (want){
+        const pick = list.filter(x => x.key === want.key && (x.key !== "other" || (x.name || "") === (want.name || "")));
+        if (pick.length) list.splice(0, list.length, pick[0]);
+      }
+    }
     const each = Math.max(1, +c.each || 6);
     const pause = opts.demo ? Math.min(+c.hidden || 0, 4) : Math.max(0, +c.hidden || 0);
     if (c.look === "row" && list.length){
@@ -601,7 +664,7 @@ function createPiece(host, cfg, piece, opts = {}){
         un.textContent = at(x.handle);
       };
       (async () => {
-        await sleep(600);
+        await sleep(hold ? 120 : 600);
         for (;;){
           showOne(list[0]); grp.classList.remove("hide"); row.classList.add("in");
           for (let i = 0; i < list.length; i++){
@@ -609,7 +672,7 @@ function createPiece(host, cfg, piece, opts = {}){
             restart(row.querySelector(".progress"), each);
             await sleep(each * 1000);
           }
-          if (pause <= 0) continue;
+          if (pause <= 0 || hold) continue;
           row.classList.remove("in");
           await sleep(1000 + pause * 1000);
         }
@@ -625,7 +688,7 @@ function createPiece(host, cfg, piece, opts = {}){
       card.classList.add("in");
     }
     if (list.length) (async () => {
-      await sleep(600);
+      await sleep(hold ? 120 : 600);
       for (;;){
         show(list[0]); item.classList.remove("hide"); card.classList.add("in");
         for (let i = 0; i < list.length; i++){
@@ -633,6 +696,7 @@ function createPiece(host, cfg, piece, opts = {}){
           restart(q(".progress"), each);
           await sleep(each * 1000);
         }
+        if (hold) continue;
         card.classList.remove("in");
         await sleep(1000 + pause * 1000);
       }
@@ -760,17 +824,31 @@ function createPiece(host, cfg, piece, opts = {}){
       await sleep(1300);
       next();
     };
-    onEvent = (k, v) => {
+    const makeEvent = (k, v) => {
       const t = TRIGGERS.find(t => t.k === k), set = (c.triggers || {})[k];
-      if (!t || !set || !set.on || !v || !v.user) return;
-      if (set.min != null && (+(k === "ttgift" ? v.coins : v.amount) || 0) < +set.min) return;
+      if (!t || !set || !v || !v.user) return null;
       const vars = Object.assign({}, v, { name: v.user, gifts: +v.amount === 1 ? "a sub" : (v.amount || 0) + " subs" });
       const fillT = str => String(str || "").replace(/\{(\w+)\}/g, (m, key) => vars[key] != null ? vars[key] : m);
-      if (queue.length >= 10) return;
-      queue.push({ type: "event", user: v.user, seal: v.seal, intro: fillT(set.intro), line: fillT(set.line),
-        link: t.link ? "twitch.tv/" + String(v.user).toLowerCase() : "" });
+      return { type: "event", user: v.user, seal: v.seal, intro: fillT(set.intro), line: fillT(set.line),
+        link: t.link ? "twitch.tv/" + String(v.user).toLowerCase() : "" };
+    };
+    onEvent = (k, v) => {
+      const set = (c.triggers || {})[k];
+      if (!set || !set.on || !v || !v.user) return;
+      if (set.min != null && (+(k === "ttgift" ? v.coins : v.amount) || 0) < +set.min) return;
+      const ev = makeEvent(k, v);
+      if (!ev || queue.length >= 10) return;
+      queue.push(ev);
       if (!busy) next();
     };
+    const SF = opts.focus && opts.focus.piece === "shoutout" ? opts.focus : null;
+    if (SF){
+      let held = null;
+      if (SF.trigger){ const t = TRIGGERS.find(t => t.k === SF.trigger); if (t) held = makeEvent(SF.trigger, t.sample); }
+      else if (SF.shout === "note") held = { type: "note", text: "Giveaway draw at 10 PM tonight" };
+      else held = { type: "so", user: "MidnightMika", source: cfg.kind === "tiktok" ? "tiktok" : "twitch" };
+      if (held) later(() => { if (busy) return; render(held); card.classList.add("in"); }, 120);
+    }
     const clean = s => (s || "").trim().replace(/^!/, "").toLowerCase();
     trigger = (raw, source) => {
       const parts = (raw || "").trim().split(/\s+/);
@@ -905,9 +983,15 @@ function createPiece(host, cfg, piece, opts = {}){
       ];
       let i = 0;
       const tick = () => { if (liveSeen) return; const [name, role, text] = samples[i++ % samples.length]; addMsg({ user: name.toLowerCase(), name, role, text }); later(tick, 2600); };
-      tick();
+      const fr = opts.focus && opts.focus.piece === "chat" && opts.focus.role;
+      if (fr){
+        const NAMES = { host: "You", mod: "jules_ph", vip: "Rafa", sub: "Theo", follower: "noor.d", viewer: "Mika" };
+        samples.filter(x => x[1] !== fr).slice(0, 2).forEach(([name, role, text]) => addMsg({ user: name.toLowerCase(), name, role, text }));
+        addMsg({ user: "focus", name: NAMES[fr] || "Viewer", role: fr, text: "this is how their messages look" });
+        later(tick, 6000);
+      } else tick();
     }
-    if (piece === "shoutout"){
+    if (piece === "shoutout" && !(opts.focus && opts.focus.piece === "shoutout")){
       let flip = false;
       const demo = () => {
         if (liveSeen) return;
@@ -926,16 +1010,22 @@ function createPiece(host, cfg, piece, opts = {}){
 }
 
 /* ---------------- OBS mode: #plug, #chat or #shoutout ---------------- */
-let PIECE = (location.hash || "").replace("#", "").toLowerCase(), PIECE_PROFILE = "obs";
+let PIECE = HASH_HEAD, PIECE_PROFILE = "obs";
 if (PIECE.startsWith("tiktok-")){ PIECE_PROFILE = "tiktok"; PIECE = PIECE.slice(7); }
+const LINK_DATA = ((location.hash || "").match(/[#&]s=([^&]+)/) || [])[1] || "";
 
-if (PIECES[PIECE] || window.obsstudio){
+if (OVERLAY_MODE) (async () => {
   document.body.classList.add("obs");
   const app = document.getElementById("app");
   if (!PIECES[PIECE]){
     app.innerHTML = '<div class="missing">Copy this overlay\'s link from Overlaya Studio and paste it into this source.</div>';
   } else {
-    const engine = createPiece(app, STORE.profiles[PIECE_PROFILE] || STORE.profiles.obs, PIECE, {});
+    let settings = STORE.profiles[PIECE_PROFILE] || STORE.profiles.obs;
+    if (LINK_DATA){
+      try { const c = await unpackCfg(LINK_DATA); c.kind = PIECE_PROFILE; settings = normalizeProfile(c); }
+      catch (e) { app.innerHTML = '<div class="missing">This overlay link is incomplete. Copy it again from Overlaya Studio.</div>'; return; }
+    }
+    const engine = createPiece(app, settings, PIECE, {});
     if (PIECE === "shoutout"){
       const input = document.createElement("input");
       input.id = "cmd"; input.autocomplete = "off";
@@ -950,9 +1040,8 @@ if (PIECES[PIECE] || window.obsstudio){
       });
     }
   }
-} else {
-  startStudio();
-}
+})();
+else startStudio();
 
 /* ---------------- Studio ---------------- */
 function startStudio(){
@@ -966,12 +1055,12 @@ function startStudio(){
     { name: "Midnight",  panel: "#141B2D", text: "#E8ECF5", accent: "#9DB4E8" },
   ];
 
-  const pieceCard = (key, extra = "") => `
-    <article class="piece${key === "chat" ? " tall" : ""}">
-      <header><h3>${PIECES[key].label}</h3><span class="size">Size ${PIECES[key].w} × ${PIECES[key].h}</span></header>
+  const pieceCard = (key, settings = "") => `
+    <article class="piece" data-piece="${key}">
+      <header><h3>${PIECES[key].label} <span class="etag">Editing</span></h3><span class="size">Size ${PIECES[key].w} × ${PIECES[key].h}</span></header>
       <div class="pv" id="pv-${key}" style="aspect-ratio:${PIECES[key].w}/${PIECES[key].h}"><div class="backdrop scene"></div><div class="stage" id="st-${key}"></div></div>
       <div class="link"><label class="field" style="margin:0"><span class="linklabel">Link for OBS</span><input type="text" readonly id="url-${key}"></label><button class="ghost" type="button" data-copy="${key}">Copy</button></div>
-      ${extra}
+      <div class="psettings" data-sec="${key}"><h4>${PIECES[key].label} settings</h4>${settings}</div>
     </article>`;
 
   document.getElementById("app").innerHTML = `
@@ -989,7 +1078,7 @@ function startStudio(){
         <button class="ghost" id="copyProfile" type="button" style="margin:10px 0 0"></button>
       </div>
 
-      <section>
+      <section data-sec="all">
         <h2>Look</h2>
         <div class="presets" id="presets"></div>
         <div class="row3">
@@ -1003,8 +1092,13 @@ function startStudio(){
         <label class="field"><span>Roundness <output id="rOut"></output></span><input type="range" min="0" max="32" step="1" data-k="style.radius" data-t="num"></label>
       </section>
 
-      <section>
+      <section data-sec="">
         <h2>Connections</h2>
+        <div class="field" data-only="obs"><span>Streaming app</span>
+          <div class="seg" role="radiogroup" aria-label="Streaming app">
+            <label><input type="radio" name="app" value="obs"><span>OBS</span></label>
+            <label><input type="radio" name="app" value="streamlabs"><span>Streamlabs</span></label>
+          </div></div>
         <label class="field" data-only="obs"><span>Twitch channel</span><input type="text" data-k="channel" placeholder="yourchannel"></label>
         <p class="note-text" data-only="obs">Facebook comments can't be read yet, so chat and triggers come from Twitch.</p>
         <div data-only="tiktok">
@@ -1021,47 +1115,6 @@ function startStudio(){
         </div>
       </section>
 
-      <section>
-        <h2>Social plug</h2>
-        <label class="field"><span>Card style</span><select data-k="plug.look"><option value="row">Logo and username</option><option value="compact">Compact with logo</option><option value="full">Large card</option></select></label>
-        <label class="check"><input type="checkbox" data-k="plug.brandColors"> Use each platform's colors</label>
-        <div class="field"><span>Your platforms</span><div id="socials"></div>
-          <button class="ghost" id="addSocial" type="button">Add a platform</button></div>
-        <div class="row">
-          <label class="field"><span>Seconds each</span><input type="number" min="1" data-k="plug.each" data-t="num"></label>
-          <label class="field"><span>Pause between rounds</span><input type="number" min="0" data-k="plug.hidden" data-t="num"></label>
-        </div>
-      </section>
-
-      <section>
-        <h2>Chat</h2>
-        <div class="row">
-          <label class="field"><span>Messages shown</span><input type="number" min="1" max="20" data-k="chat.max" data-t="num"></label>
-          <label class="field"><span>Fade after (sec, 0 = never)</span><input type="number" min="0" data-k="chat.fade" data-t="num"></label>
-        </div>
-        <label class="check"><input type="checkbox" data-k="chat.hideCommands"> Hide !commands</label>
-        <label class="check"><input type="checkbox" data-k="chat.extEmotes"> Show 7TV, BTTV and FFZ emotes</label>
-        <label class="check"><input type="checkbox" data-k="chat.bigEmoji"> Make emoji-only messages bigger</label>
-        <div class="field"><span>Viewer types</span>
-          <p class="note-text" style="margin:0 0 10px">Detected automatically from each chat message. Set a color, a tag, and whether their messages get a highlight.</p>
-          <div id="roles"></div></div>
-        <label class="field"><span>Hide these users</span><input type="text" data-k="chat.hideUsers"></label>
-      </section>
-
-      <section>
-        <h2>Shoutouts and notes</h2>
-        <label class="field"><span>Shoutout intro</span><input type="text" data-k="shout.soIntro"></label>
-        <label class="field"><span>Shoutout line</span><input type="text" data-k="shout.soLine"></label>
-        <label class="field"><span>Note intro</span><input type="text" data-k="shout.noteIntro"></label>
-        <div class="row">
-          <label class="field"><span>Shoutout command</span><input type="text" data-k="shout.soCmd"></label>
-          <label class="field"><span>Note command</span><input type="text" data-k="shout.noteCmd"></label>
-        </div>
-        <label class="field"><span>Seconds on screen</span><input type="number" min="2" data-k="shout.seconds" data-t="num"></label>
-        <div class="field"><span>Automatic triggers</span>
-          <p class="note-text" style="margin:0 0 10px">These pop up a card by themselves when it happens on stream. Tags like {name} and {amount} fill in automatically.</p>
-          <div id="triggers"></div></div>
-      </section>
     </aside>
 
     <main class="main">
@@ -1070,15 +1123,69 @@ function startStudio(){
         <select id="backdrop" aria-label="Preview background">
           <option value="scene">Dark scene</option><option value="bright">Bright scene</option><option value="checker">Transparent</option>
         </select>
-        <button class="primary" id="save" type="button">Save overlay file</button>
+        <button class="ghost" id="save" type="button" style="margin:0">Download backup</button>
       </div>
       <div class="board">
-        ${pieceCard("plug")}
-        ${pieceCard("chat")}
+        ${pieceCard("plug", `
+          <div class="field"><span>Choose a look</span>
+            <div class="looks" id="looks" role="radiogroup" aria-label="Social plug look">
+              <button type="button" class="lk" data-look="row" aria-pressed="false"><span class="lkmock m-row"><i></i><b></b></span><span>Logo and username</span></button>
+              <button type="button" class="lk" data-look="compact" aria-pressed="false"><span class="lkmock m-compact"><i></i><span><em></em><b></b><em></em></span></span><span>Compact with logo</span></button>
+              <button type="button" class="lk" data-look="full" aria-pressed="false"><span class="lkmock m-full"><u></u><span><em></em><b></b><em></em></span></span><span>Large card</span></button>
+            </div></div>
+          <div class="cols">
+            <div>
+              <div class="field"><span>Your platforms</span><div id="socials"></div>
+                <button class="ghost" id="addSocial" type="button">Add a platform</button></div>
+            </div>
+            <div>
+              <label class="check"><input type="checkbox" data-k="plug.brandColors"> Use each platform's colors</label>
+              <div class="row">
+                <label class="field"><span>Seconds each</span><input type="number" min="1" data-k="plug.each" data-t="num"></label>
+                <label class="field"><span>Pause between rounds</span><input type="number" min="0" data-k="plug.hidden" data-t="num"></label>
+              </div>
+              <p class="note-text">Set the pause to 0 to keep it on screen all the time.</p>
+            </div>
+          </div>`)}
+        ${pieceCard("chat", `
+          <div class="cols">
+            <div>
+              <div class="row">
+                <label class="field"><span>Messages shown</span><input type="number" min="1" max="20" data-k="chat.max" data-t="num"></label>
+                <label class="field"><span>Fade after (sec, 0 = never)</span><input type="number" min="0" data-k="chat.fade" data-t="num"></label>
+              </div>
+              <label class="check"><input type="checkbox" data-k="chat.hideCommands"> Hide !commands</label>
+              <label class="check"><input type="checkbox" data-k="chat.extEmotes"> Show 7TV, BTTV and FFZ emotes</label>
+              <label class="check"><input type="checkbox" data-k="chat.bigEmoji"> Make emoji-only messages bigger</label>
+              <label class="field"><span>Hide these users</span><input type="text" data-k="chat.hideUsers"></label>
+            </div>
+            <div>
+              <div class="field"><span>Viewer types</span>
+                <p class="note-text" style="margin:0 0 10px">Detected automatically from each chat message. Set a color, a tag, and whether their messages get a highlight.</p>
+                <div id="roles"></div></div>
+            </div>
+          </div>`)}
         ${pieceCard("shoutout", `
-          <div class="trial"><label class="field" style="margin:0"><span>Try a shoutout</span><input type="text" id="trySo" placeholder="username"></label><button class="ghost" id="btnSo" type="button">Show</button></div>
-          <div class="trial"><label class="field" style="margin:0"><span>Try a note</span><input type="text" id="tryNote" placeholder="Giveaway at 10 PM"></label><button class="ghost" id="btnNote" type="button">Show</button></div>`)}
-        <p class="steps"><b>Two separate setups:</b> pick Twitch and Facebook or TikTok at the top of the left panel. Each has its own look, platforms, chat and triggers, and its own links.<br><b>OBS (Twitch and Facebook):</b> save, open the saved file, then add a Browser source, untick Local file, paste one link into URL and set the size shown.<br><b>TikTok LIVE Studio:</b> switch to TikTok, copy a link, then Add source, choose Link and paste it.<br>After changing anything, save again and refresh each source.</p>
+          <div class="cols">
+            <div>
+              <label class="field"><span>Shoutout intro</span><input type="text" data-k="shout.soIntro"></label>
+              <label class="field"><span>Shoutout line</span><input type="text" data-k="shout.soLine"></label>
+              <label class="field"><span>Note intro</span><input type="text" data-k="shout.noteIntro"></label>
+              <div class="row">
+                <label class="field"><span>Shoutout command</span><input type="text" data-k="shout.soCmd"></label>
+                <label class="field"><span>Note command</span><input type="text" data-k="shout.noteCmd"></label>
+              </div>
+              <label class="field"><span>Seconds on screen</span><input type="number" min="2" data-k="shout.seconds" data-t="num"></label>
+              <div class="trial"><label class="field" style="margin:0"><span>Try a shoutout</span><input type="text" id="trySo" placeholder="username"></label><button class="ghost" id="btnSo" type="button">Show</button></div>
+              <div class="trial"><label class="field" style="margin:0"><span>Try a note</span><input type="text" id="tryNote" placeholder="Giveaway at 10 PM"></label><button class="ghost" id="btnNote" type="button">Show</button></div>
+            </div>
+            <div>
+              <div class="field"><span>Automatic triggers</span>
+                <p class="note-text" style="margin:0 0 10px">These pop up a card by themselves when it happens on stream. Tags like {name} and {amount} fill in automatically.</p>
+                <div id="triggers"></div></div>
+            </div>
+          </div>`)}
+        <p class="steps"><b>How it works:</b> every change you make is kept in this browser and built into the links above. Click Copy, paste the link into your streaming app, and set the size shown. <b>After you change something, copy the link again</b> and paste it over the old one.<br><span data-only="obs" id="stepsApp"></span><span data-only="tiktok"><b>TikTok LIVE Studio:</b> click Add source, choose Link, paste the link and resize it.</span></p>
       </div>
     </main>
   </div>`;
@@ -1087,7 +1194,7 @@ function startStudio(){
   const get = (o, p) => p.split(".").reduce((a, k) => a && a[k], o);
   const set = (o, p, v) => { const ks = p.split("."); const last = ks.pop(); ks.reduce((a, k) => a[k], o)[last] = v; };
   const inputs = [...document.querySelectorAll("[data-k]")];
-  let engines = {}, dirty = false, timer = null, fileHandle = null;
+  let engines = {}, dirty = false, timer = null, fileHandle = null, focus = null;
   const status = t => $("status").textContent = t;
 
   function refreshInputs(){
@@ -1108,15 +1215,41 @@ function startStudio(){
   function rebuild(){
     Object.values(engines).forEach(e => e.destroy());
     engines = {};
-    Object.keys(PIECES).forEach(k => engines[k] = createPiece($("st-" + k), cfg, k, { demo: true }));
+    Object.keys(PIECES).forEach(k => engines[k] = createPiece($("st-" + k), cfg, k, { demo: true, focus }));
     fit();
   }
   function changed(){
-    dirty = true; status("Unsaved changes");
+    status("Saved in this browser. Copy the new link into your source to update your stream.");
+    persist(); clearTimeout(changed.lt); changed.lt = setTimeout(fillLinks, 250);
     $("opOut").textContent = Math.round(cfg.style.panelOpacity * 100) + "%";
     $("rOut").textContent = cfg.style.radius + "px";
     clearTimeout(timer); timer = setTimeout(rebuild, 250);
   }
+
+  /* the preview follows whatever you're editing */
+  const focusFrom = el => {
+    if (!el || !el.closest || !(el.closest(".side") || el.closest(".psettings"))) return null;
+    const soc = el.closest(".social"); if (soc) return { piece: "plug", social: +soc.dataset.i };
+    const rr = el.closest(".rolerow"); if (rr) return { piece: "chat", role: rr.dataset.k };
+    const tr = el.closest(".trow"); if (tr) return { piece: "shoutout", trigger: tr.dataset.k };
+    const k = (el.dataset && el.dataset.k) || "";
+    if (/^shout\.so/.test(k)) return { piece: "shoutout", shout: "so" };
+    if (/^shout\.note/.test(k)) return { piece: "shoutout", shout: "note" };
+    const sec = el.closest("[data-sec]");
+    return sec && sec.dataset.sec ? { piece: sec.dataset.sec } : null;
+  };
+  function setFocus(f){
+    if (JSON.stringify(f) === JSON.stringify(focus)) return;
+    focus = f;
+    document.querySelectorAll(".piece[data-piece]").forEach(pc => pc.classList.toggle("editing", !!f && (f.piece === "all" || f.piece === pc.dataset.piece)));
+    clearTimeout(timer); timer = setTimeout(rebuild, 60);
+  }
+  document.addEventListener("focusin", e => { if (e.target.closest && (e.target.closest(".side") || e.target.closest(".psettings"))) setFocus(focusFrom(e.target)); });
+  document.addEventListener("pointerdown", e => {
+    if (!e.target.closest) return;
+    if (e.target.closest(".side") || e.target.closest(".psettings")){ const f = focusFrom(e.target); if (f) setFocus(f); return; }
+    if (!e.target.closest(".piece") && !e.target.closest(".picker")) setFocus(null);
+  });
 
   refreshInputs();
   inputs.forEach(inp => {
@@ -1144,7 +1277,7 @@ function startStudio(){
     ROLE_INFO.filter(([k, label, only]) => !only || only === (STORE.active === "tiktok" ? "TikTok" : "Twitch")).forEach(([k, label, only]) => {
       const r = cfg.chat.roles[k];
       const row = document.createElement("div");
-      row.className = "rolerow" + (r.show ? "" : " off");
+      row.className = "rolerow" + (r.show ? "" : " off"); row.dataset.k = k;
       row.innerHTML = '<div class="rh"><span><b style="font-weight:500"></b><small></small></span><label class="switch" title="Show their messages"><input type="checkbox"><i></i></label></div>'
         + '<div class="rb"><input type="color" aria-label="Color"><label class="field" style="margin:0"><input type="text" placeholder="Tag (leave empty for none)" aria-label="Tag"></label></div>'
         + '<label class="check"><input type="checkbox" class="hlc"> Highlight their messages</label>';
@@ -1166,7 +1299,7 @@ function startStudio(){
     TRIGGERS.filter(t => t.src === (STORE.active === "tiktok" ? "TikTok" : "Twitch")).forEach(t => {
       const set = cfg.shout.triggers[t.k];
       const row = document.createElement("div");
-      row.className = "trow" + (set.on ? "" : " off");
+      row.className = "trow" + (set.on ? "" : " off"); row.dataset.k = t.k;
       row.innerHTML = '<div class="rh"><span><b style="font-weight:500"></b><small></small></span><label class="switch" title="Turn on"><input type="checkbox"><i></i></label></div>'
         + '<div class="tb"><label class="field"><input type="text" aria-label="Top line"></label><label class="field"><input type="text" aria-label="Bottom line"></label></div>'
         + '<div class="tf">' + (t.min != null ? '<label class="field"><span style="font-size:13px">' + (t.minLabel || (t.k === "ttgift" ? "Minimum coins" : "Minimum bits")) + '</span><input type="number" min="0" aria-label="Minimum"></label>' : '<span style="flex:1"></span>')
@@ -1195,13 +1328,18 @@ function startStudio(){
       ? '<span class="pbadge has" style="width:' + size + 'px;height:' + size + 'px"><img src="' + ic + '" alt=""></span>'
       : '<span class="pbadge" style="width:' + size + 'px;height:' + size + 'px;background:' + inf.bg + ';color:' + inf.fg + '">' + (inf.name || "?").charAt(0) + '</span>';
   };
+  const updateLooks = () => document.querySelectorAll("#looks .lk").forEach(b => b.setAttribute("aria-pressed", b.dataset.look === (cfg.plug.look || "row") ? "true" : "false"));
+  document.querySelectorAll("#looks .lk").forEach(b => b.addEventListener("click", () => {
+    cfg.plug.look = b.dataset.look; updateLooks(); renderSocials(); changed();
+  }));
   function renderSocials(){
+    updateLooks();
     const box = $("socials"); box.innerHTML = "";
     if (!cfg.plug.socials.length){
       box.innerHTML = '<p class="note-text" style="margin:0 0 4px">No platforms yet. Add the ones you want to show.</p>';
     }
     cfg.plug.socials.forEach((s, i) => {
-      const row = document.createElement("div"); row.className = "social";
+      const row = document.createElement("div"); row.className = "social"; row.dataset.i = i;
       const inf = socialInfo(s);
       row.innerHTML = '<div class="phead">' + badgeHTML(s, 34)
         + (s.key === "other" ? '<input type="text" placeholder="Platform name" aria-label="Platform name" class="pname-in">' : '<span class="pname"></span>')
@@ -1211,6 +1349,7 @@ function startStudio(){
         + '<input type="text" class="why" placeholder="Why follow? (optional)" aria-label="Why follow">';
       if (s.key !== "other") row.querySelector(".pname").textContent = inf ? inf.name : "";
       const h = row.querySelector(".handle-in"), w = row.querySelector(".why");
+      if ((cfg.plug.look || "row") === "row") w.style.display = "none";
       h.value = s.handle || ""; w.value = s.why || "";
       h.addEventListener("input", () => { s.handle = h.value; changed(); });
       w.addEventListener("input", () => { s.why = w.value; changed(); });
@@ -1277,21 +1416,51 @@ function startStudio(){
   const noSocials = Object.values(STORE.profiles).every(p => !p.plug.socials.length);
   if (!STORE.setupDone && noSocials) setTimeout(() => openPicker(true), 300);
 
-  /* links for OBS */
+  /* links: each one carries this setup's settings */
   const base = location.href.split("#")[0];
-  const obsLink = key => {
-    if (STORE.active === "tiktok") key = "tiktok-" + key;
-    if (location.protocol !== "file:" || STORE.active === "tiktok") return base + "#" + key;
-    let p = base.replace(/^file:\/\//, "");
-    if (/^\/[A-Za-z]:/.test(p)) p = p.slice(1);
-    return "http://absolute/" + p + "#" + key;
+  const APP_NAMES = { obs: "OBS", streamlabs: "Streamlabs" };
+  const appName = () => STORE.active === "tiktok" ? "TikTok LIVE Studio" : APP_NAMES[STORE.app || "obs"];
+  const linkFor = (key, data) => {
+    const h = "#" + (STORE.active === "tiktok" ? "tiktok-" : "") + key + "&s=" + data;
+    if (location.protocol === "file:" && STORE.active !== "tiktok" && (STORE.app || "obs") === "obs"){
+      let p = base.replace(/^file:\/\//, "");
+      if (/^\/[A-Za-z]:/.test(p)) p = p.slice(1);
+      return "http://absolute/" + p + h;
+    }
+    return base + h;
   };
   const realPage = /^(file|https?):$/.test(location.protocol);
-  const fillLinks = () => {
-    Object.keys(PIECES).forEach(k => $("url-" + k).value = realPage ? obsLink(k) : "Open the saved file in Chrome to get this link");
+  let linkTick = 0;
+  const fillLinks = async () => {
+    const t = ++linkTick;
+    document.querySelectorAll(".linklabel").forEach(l => l.textContent = "Link for " + appName());
     document.querySelectorAll("[data-copy]").forEach(b => b.disabled = !realPage);
-    document.querySelectorAll(".linklabel").forEach(l => l.textContent = STORE.active === "tiktok" ? "Link for TikTok LIVE Studio" : "Link for OBS");
+    if (!realPage){ Object.keys(PIECES).forEach(k => $("url-" + k).value = "Open Overlaya Studio in Chrome to get this link"); return; }
+    const data = await packCfg(linkCfg(cfg));
+    if (t !== linkTick) return;
+    Object.keys(PIECES).forEach(k => $("url-" + k).value = linkFor(k, data));
   };
+  let persistTimer = null;
+  const persist = () => {
+    clearTimeout(persistTimer);
+    persistTimer = setTimeout(() => {
+      try {
+        const copy = Object.assign({}, STORE, { logos: undefined });
+        localStorage.setItem(LS_KEY, JSON.stringify(copy));
+      } catch (e) {}
+    }, 300);
+  };
+  document.querySelectorAll('input[name="app"]').forEach(r => {
+    r.checked = r.value === (STORE.app || "obs");
+    r.addEventListener("change", () => { STORE.app = r.value; persist(); fillLinks(); showSteps(); });
+  });
+  const showSteps = () => {
+    const a = STORE.app || "obs";
+    $("stepsApp").innerHTML = a === "streamlabs"
+      ? "<b>Streamlabs:</b> in Sources click +, choose Browser Source, add it, then paste the link into URL and set the size shown."
+      : "<b>OBS:</b> in Sources click +, choose Browser, untick Local file, then paste the link into URL and set the size shown.";
+  };
+  showSteps();
   fillLinks();
   const other = () => STORE.active === "tiktok" ? "obs" : "tiktok";
   const showProfile = () => {
@@ -1390,7 +1559,7 @@ function startStudio(){
   $("btnNote").addEventListener("click", () => engines.shoutout.trigger((cfg.shout.noteCmd || "note") + " " + ($("tryNote").value.trim() || "Giveaway at 10 PM")));
   $("backdrop").addEventListener("change", e => document.querySelectorAll(".pv .backdrop").forEach(d => d.className = "backdrop " + e.target.value));
   window.addEventListener("resize", fit);
-  window.addEventListener("beforeunload", e => { if (dirty){ e.preventDefault(); e.returnValue = ""; } });
+
 
   async function save(){
     const json = JSON.stringify(STORE, null, 2).replace(/</g, "\\u003c");
@@ -1406,12 +1575,12 @@ function startStudio(){
       if (window.showSaveFilePicker){
         if (!fileHandle) fileHandle = await showSaveFilePicker({ suggestedName: "overlaya-studio.html", types: [{ description: "Overlay", accept: { "text/html": [".html"] } }] });
         const w = await fileHandle.createWritable(); await w.write(out); await w.close();
-        status("Saved to " + fileHandle.name + ". Open that file to get its OBS links.");
-      } else { download(); status("Saved to Downloads. Open that file to get its OBS links."); }
+        status("Backup saved to " + fileHandle.name + ".");
+      } else { download(); status("Backup saved to your Downloads folder."); }
       dirty = false;
     } catch (e){
       if (e && e.name === "AbortError") return;
-      download(); dirty = false; status("Saved to Downloads. Open that file to get its OBS links.");
+      download(); dirty = false; status("Backup saved to your Downloads folder.");
     }
   }
   $("save").addEventListener("click", save);
