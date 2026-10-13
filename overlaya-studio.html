@@ -58,6 +58,29 @@
 .ov .m{position:absolute}
 .ov .m.plug{left:20px;top:50%;transform:translateY(-50%)}
 .ov .m.chat{left:20px;right:20px;bottom:20px}
+.ov .m.specs{left:0;right:0;top:50%;transform:translateY(-50%);display:flex;justify-content:flex-start;padding:0 20px}
+.ov .tick{display:flex;align-items:center;width:100%;height:84px;background:var(--panel);border:1px solid var(--edge);border-radius:999px;overflow:hidden;
+  clip-path:inset(0 100% 0 0 round 999px);transition:clip-path 1s cubic-bezier(.77,0,.18,1)}
+.ov .tick.in{clip-path:inset(0 0 0 0 round 999px)}
+.ov .tick .tag{flex:none;height:100%;display:flex;align-items:center;gap:10px;padding:0 28px 0 30px;background:var(--accent);color:var(--panelSolid);
+  font-size:22px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;border-radius:999px;position:relative;z-index:1}
+.ov .tick .lane{flex:1;overflow:hidden;height:100%;display:flex;align-items:center;
+  -webkit-mask-image:linear-gradient(90deg,transparent,#000 40px,#000 calc(100% - 60px),transparent);mask-image:linear-gradient(90deg,transparent,#000 40px,#000 calc(100% - 60px),transparent)}
+.ov .tick .belt{display:flex;flex:none;white-space:nowrap;animation:ovscroll linear infinite;will-change:transform}
+.ov .tick .seg{display:flex;flex:none}
+.ov .tick .it{display:inline-flex;align-items:baseline;gap:12px;padding:0 34px;font-size:26px;position:relative}
+.ov .tick .it::after{content:"";position:absolute;right:-4px;top:50%;width:8px;height:8px;margin-top:-4px;border-radius:50%;background:var(--accent);opacity:.7}
+.ov .tick .it b{font-weight:700;letter-spacing:.06em;text-transform:uppercase;font-size:18px;color:var(--accent)}
+.ov .tick .it span{font-weight:500;color:var(--text)}
+@keyframes ovscroll{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+.ov .scard2{position:relative;display:flex;align-items:center;gap:22px;padding:18px 44px 20px 18px;background:var(--panel);border:1px solid var(--edge);border-radius:999px;
+  clip-path:inset(0 100% 0 0 round 999px);transition:clip-path 1s cubic-bezier(.77,0,.18,1)}
+.ov .scard2.in{clip-path:inset(0 0 0 0 round 999px)}
+.ov .scard2 .chip{flex:none;min-width:96px;height:64px;padding:0 22px;border-radius:999px;background:var(--accent);color:var(--panelSolid);display:flex;align-items:center;justify-content:center;
+  font-size:22px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+.ov .scard2 .val{font-size:34px;font-weight:600;color:var(--text);white-space:nowrap;transition:opacity .35s ease,transform .35s ease}
+.ov .scard2 .val.hide,.ov .scard2 .chip.hide{opacity:0;transform:translateY(6px)}
+.ov .scard2 .chip{transition:opacity .35s ease,transform .35s ease}
 .ov .m.shout{left:50%;top:50%;transform:translate(-50%,-50%);max-width:calc(100% - 40px)}
 
 .ov .progress{position:absolute;left:22px;right:22px;bottom:0;height:2px;border-radius:2px;background:var(--accent);opacity:.85;transform:scaleX(0);transform-origin:left;z-index:1}
@@ -348,6 +371,7 @@ body.studio{
 <div id="app"></div>
 <script>
 const SOURCE = "<!doctype html>\n" + document.documentElement.outerHTML;
+const DESKTOP = window.OVERLAYA_DESKTOP || null;
 let STORE = JSON.parse(document.getElementById("cfg").textContent);
 let cfg = null;
 
@@ -434,6 +458,9 @@ const TRIGGERS = [
 function normalizeProfile(p){
   p.plug.socials = (p.plug.socials || []).map(normSocial);
   if (!p.plug.look) p.plug.look = "row";
+  p.specs = Object.assign({ look: "ticker", title: "My setup", speed: 60, each: 5, items: [
+    { label: "CPU", value: "" }, { label: "GPU", value: "" }, { label: "RAM", value: "" },
+    { label: "Storage", value: "" }, { label: "Monitor", value: "" }, { label: "Mic", value: "" } ] }, p.specs || {});
   p.shout.triggers = p.shout.triggers || {};
   TRIGGERS.forEach(t => {
     const d = { on: t.on, intro: t.intro, line: t.line };
@@ -446,9 +473,10 @@ function normalizeProfile(p){
 }
 /* Two separate sets of settings: OBS (Twitch and Facebook) and TikTok LIVE Studio */
 const LS_KEY = "overlaya-studio-v1";
-const HASH_HEAD = (location.hash || "").replace("#", "").split("&")[0].toLowerCase();
-const OVERLAY_MODE = /^(tiktok-)?(plug|chat|shoutout)$/.test(HASH_HEAD) || !!window.obsstudio;
-if (!OVERLAY_MODE){
+const DESK_PIECE = DESKTOP ? ((location.pathname.match(/^\/overlay\/(plug|chat|shoutout|specs)/) || [])[1] || "") : "";
+const HASH_HEAD = DESKTOP ? (DESK_PIECE ? "tiktok-" + DESK_PIECE : "") : (location.hash || "").replace("#", "").split("&")[0].toLowerCase();
+const OVERLAY_MODE = /^(tiktok-)?(plug|chat|shoutout|specs)$/.test(HASH_HEAD) || (!DESKTOP && !!window.obsstudio);
+if (!OVERLAY_MODE && !DESKTOP){
   try {
     const saved = JSON.parse(localStorage.getItem(LS_KEY) || "null");
     if (saved && saved.profiles){ saved.logos = Object.assign({}, STORE.logos || {}, saved.logos || {}); STORE = saved; }
@@ -467,6 +495,7 @@ const logoFor = x => x.icon || (x.key !== "other" && STORE.logos[x.key]) || "";
 Object.entries(STORE.profiles).forEach(([k, p]) => { p.kind = k; normalizeProfile(p); });
 if (!STORE.profiles[STORE.active]) STORE.active = "obs";
 cfg = STORE.profiles[STORE.active];
+if (DESKTOP){ STORE.active = "tiktok"; cfg = STORE.profiles.tiktok; }
 const PROFILE_NAMES = { obs: "Twitch and Facebook", tiktok: "TikTok" };
 
 /* ---------- settings travel inside each overlay link ---------- */
@@ -503,7 +532,7 @@ const TT_CLOSE = {
   4006: { msg: "No activity, reconnecting", wait: 3000, kind: "wait" },
   4401: { msg: "Connection key not accepted", wait: 0, kind: "bad" },
   4403: { msg: "This key can't do that", wait: 0, kind: "bad" },
-  4400: { msg: "Check your username", wait: 0, kind: "bad" },
+  4400: { msg: "Connection refused", wait: 0, kind: "bad" },
   4429: { msg: "Too many connections open", wait: 60000, kind: "bad" },
 };
 /* turns any incoming TikTok message into { event, data } with plain fields */
@@ -513,7 +542,7 @@ function ttNormalize(m){
   const type = String(m.type || m.messageType || m.method || "");
   const d = m.data || m;
   const u = d.user || {};
-  const id = u.userIdentity || {};
+  const id = d.userIdentity || u.userIdentity || {};
   const base = {
     uniqueId: u.uniqueId || u.displayId || d.uniqueId || "",
     nickname: u.nickname || d.nickname || u.uniqueId || "",
@@ -549,6 +578,7 @@ const PIECES = {
   plug:     { label: "Social plug",          w: 900,  h: 220 },
   chat:     { label: "Chat",                 w: 520,  h: 760 },
   shoutout: { label: "Shoutouts and notes",  w: 1000, h: 320 },
+  specs:    { label: "PC specs",             w: 1920, h: 140 },
 };
 const FONTS = ["Jost", "Poppins", "Montserrat", "Outfit", "DM Sans", "Manrope", "Nunito", "Lexend"];
 
@@ -584,7 +614,7 @@ function createPiece(host, cfg, piece, opts = {}){
     "--font": '"' + (st.font || "Jost") + '","Helvetica Neue",Arial,sans-serif,"Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji"',
     "--panel": rgba(st.panel, st.panelOpacity == null ? .9 : st.panelOpacity),
     "--text": st.text, "--muted": rgba(st.text, .75), "--accent": st.accent,
-    "--edge": rgba(st.accent, .3), "--r": (st.radius == null ? 20 : st.radius) + "px",
+    "--edge": rgba(st.accent, .3), "--panelSolid": st.panel, "--r": (st.radius == null ? 20 : st.radius) + "px",
   };
   Object.entries(vars).forEach(([k, v]) => ov.style.setProperty(k, v));
   host.append(ov);
@@ -701,6 +731,57 @@ function createPiece(host, cfg, piece, opts = {}){
         await sleep(1000 + pause * 1000);
       }
     })();
+    return { trigger, destroy, test: () => {} };
+  }
+
+  if (piece === "specs"){
+    const c = cfg.specs || {};
+    const items = (c.items || []).filter(x => (x.label || "").trim() && (x.value || "").trim());
+    const list = items.length ? items : (opts.demo ? [
+      { label: "CPU", value: "Your processor" }, { label: "GPU", value: "Your graphics card" }, { label: "RAM", value: "Your memory" } ] : []);
+    if (!list.length) return { trigger, destroy, test: () => {} };
+    const SF = opts.focus && opts.focus.piece === "specs" && opts.focus.spec != null ? list[opts.focus.spec] : null;
+    const host = mod("specs", "");
+    if ((c.look || "ticker") === "ticker"){
+      const t = document.createElement("div"); t.className = "tick";
+      t.innerHTML = '<div class="tag"></div><div class="lane"><div class="belt"></div></div>';
+      t.querySelector(".tag").textContent = (c.title || "").trim() || "Specs";
+      if (!(c.title || "").trim()) t.querySelector(".tag").style.display = "none";
+      const belt = t.querySelector(".belt");
+      const seg = () => { const g = document.createElement("div"); g.className = "seg"; list.forEach(x => {
+        const it = document.createElement("span"); it.className = "it"; it.innerHTML = "<b></b><span></span>";
+        it.querySelector("b").textContent = x.label; it.querySelector("span").textContent = x.value; g.append(it); }); return g; };
+      host.append(t);
+      // repeat until one copy is wider than the lane, then duplicate for a seamless loop
+      const one = seg(); belt.append(one);
+      requestAnimationFrame(() => {
+        const lane = t.querySelector(".lane").clientWidth || 1600;
+        while (one.scrollWidth < lane && one.children.length < 200) list.forEach((x, i) => one.append(one.children[i].cloneNode(true)));
+        belt.append(one.cloneNode(true));
+        const px = one.scrollWidth, speed = Math.max(10, +c.speed || 60);
+        belt.style.animationDuration = (px / speed) + "s";
+        later(() => t.classList.add("in"), 150);
+      });
+    } else {
+      const card = document.createElement("div"); card.className = "scard2";
+      card.innerHTML = '<div class="chip"></div><div class="val"></div><div class="progress"></div>';
+      host.append(card);
+      const chip = card.querySelector(".chip"), val = card.querySelector(".val");
+      const show = x => { chip.textContent = x.label; val.textContent = x.value; };
+      const each = Math.max(2, +c.each || 5);
+      (async () => {
+        await sleep(300);
+        if (SF){ show(SF); card.classList.add("in"); return; }
+        let i = 0; show(list[0]); card.classList.add("in");
+        for (;;){
+          restart(card.querySelector(".progress"), each);
+          await sleep(each * 1000);
+          chip.classList.add("hide"); val.classList.add("hide"); await sleep(350);
+          i = (i + 1) % list.length; show(list[i]);
+          chip.classList.remove("hide"); val.classList.remove("hide");
+        }
+      })();
+    }
     return { trigger, destroy, test: () => {} };
   }
 
@@ -959,6 +1040,16 @@ function createPiece(host, cfg, piece, opts = {}){
   };
   const ttKey = (cfg.tiktok && cfg.tiktok.key) || "";
   const connectTikTok = () => {
+    if (DESKTOP){
+      tws = new WebSocket("ws://" + location.host + "/events");
+      tws.onmessage = e => {
+        let m; try { m = JSON.parse(e.data); } catch (err) { return; }
+        if (m.kind === "tiktok"){ const d = ttNormalize({ type: m.type, data: m.data }); if (d) handleTT(d); }
+      };
+      tws.onerror = () => {};
+      tws.onclose = () => later(connectTikTok, 2000);
+      return;
+    }
     if (!ttUser) return;
     tws = new WebSocket(ttUrl(ttUser, ttKey));
     tws.onmessage = e => ttMessages(e.data).forEach(handleTT);
@@ -1026,6 +1117,14 @@ if (OVERLAY_MODE) (async () => {
       catch (e) { app.innerHTML = '<div class="missing">This overlay link is incomplete. Copy it again from Overlaya Studio.</div>'; return; }
     }
     const engine = createPiece(app, settings, PIECE, {});
+    if (DESKTOP){
+      const listen = () => {
+        const w = new WebSocket("ws://" + location.host + "/events");
+        w.onmessage = e => { try { if (JSON.parse(e.data).kind === "settings") location.reload(); } catch (err) {} };
+        w.onclose = () => setTimeout(listen, 2000);
+      };
+      listen();
+    }
     if (PIECE === "shoutout"){
       const input = document.createElement("input");
       input.id = "cmd"; input.autocomplete = "off";
@@ -1105,7 +1204,8 @@ function startStudio(){
         <div class="toggle-row"><span>TikTok LIVE</span><label class="switch" title="Connect TikTok"><input type="checkbox" data-k="tiktok.on"><i></i></label></div>
         <p class="note-text">Overlaya connects straight to your TikTok LIVE using your username. Nothing to install.</p>
         <label class="field"><span>Your TikTok username</span><input type="text" data-k="tiktok.user" placeholder="@yourname"></label>
-        <label class="field"><span>Connection key (optional)</span><input type="text" data-k="tiktok.key" placeholder="Only if connecting is refused" autocomplete="off" spellcheck="false"></label>
+        <label class="field"><span>Connection key</span><input type="text" data-k="tiktok.key" placeholder="Paste your free key here" autocomplete="off" spellcheck="false"></label>
+        <p class="note-text">Get a free key: sign up at eulerstream.com, open the Dashboard, then API Keys and Create. Use a free key only.</p>
         <div class="ttlive" id="ttlive">
           <button class="primary" id="ttBtn" type="button">Connect to LIVE</button>
           <div class="st"><i class="dot" id="ttAppDot"></i><span>Connection</span><b id="ttApp">Not checked</b></div>
@@ -1185,6 +1285,24 @@ function startStudio(){
                 <div id="triggers"></div></div>
             </div>
           </div>`)}
+        ${pieceCard("specs", `
+          <div class="field"><span>Choose a look</span>
+            <div class="looks" id="specLooks" role="radiogroup" aria-label="PC specs look" style="grid-template-columns:repeat(2,minmax(0,1fr))">
+              <button type="button" class="lk" data-look="ticker" aria-pressed="false"><span class="lkmock m-row" style="width:180px"><i style="width:44px;border-radius:999px"></i><b></b><b style="width:40px"></b></span><span>Scrolling ticker</span></button>
+              <button type="button" class="lk" data-look="card" aria-pressed="false"><span class="lkmock m-row"><i style="width:40px;border-radius:999px"></i><b></b></span><span>One at a time</span></button>
+            </div></div>
+          <div class="cols">
+            <div>
+              <div class="field"><span>Your parts</span><div id="specItems"></div>
+                <button class="ghost" id="addSpec" type="button">Add a part</button></div>
+            </div>
+            <div>
+              <label class="field"><span>Label at the start (leave empty for none)</span><input type="text" data-k="specs.title" placeholder="My setup"></label>
+              <label class="field" id="specSpeed"><span>Scroll speed <output id="spdOut"></output></span><input type="range" min="20" max="160" step="5" data-k="specs.speed" data-t="num"></label>
+              <label class="field" id="specEach"><span>Seconds per part</span><input type="number" min="2" data-k="specs.each" data-t="num"></label>
+              <p class="note-text">Tip: the ticker looks best stretched across the bottom or top of your screen. Resize it freely in your streaming app.</p>
+            </div>
+          </div>`)}
         <p class="steps"><b>How it works:</b> every change you make is kept in this browser and built into the links above. Click Copy, paste the link into your streaming app, and set the size shown. <b>After you change something, copy the link again</b> and paste it over the old one.<br><span data-only="obs" id="stepsApp"></span><span data-only="tiktok"><b>TikTok LIVE Studio:</b> click Add source, choose Link, paste the link and resize it.</span></p>
       </div>
     </main>
@@ -1219,7 +1337,7 @@ function startStudio(){
     fit();
   }
   function changed(){
-    status("Saved in this browser. Copy the new link into your source to update your stream.");
+    status(DESKTOP ? "Saved. Your overlays update on stream automatically." : "Saved in this browser. Copy the new link into your source to update your stream.");
     persist(); clearTimeout(changed.lt); changed.lt = setTimeout(fillLinks, 250);
     $("opOut").textContent = Math.round(cfg.style.panelOpacity * 100) + "%";
     $("rOut").textContent = cfg.style.radius + "px";
@@ -1229,6 +1347,7 @@ function startStudio(){
   /* the preview follows whatever you're editing */
   const focusFrom = el => {
     if (!el || !el.closest || !(el.closest(".side") || el.closest(".psettings"))) return null;
+    const sp = el.closest(".spec-row"); if (sp) return { piece: "specs", spec: +sp.dataset.spec };
     const soc = el.closest(".social"); if (soc) return { piece: "plug", social: +soc.dataset.i };
     const rr = el.closest(".rolerow"); if (rr) return { piece: "chat", role: rr.dataset.k };
     const tr = el.closest(".trow"); if (tr) return { piece: "shoutout", trigger: tr.dataset.k };
@@ -1332,6 +1451,29 @@ function startStudio(){
   document.querySelectorAll("#looks .lk").forEach(b => b.addEventListener("click", () => {
     cfg.plug.look = b.dataset.look; updateLooks(); renderSocials(); changed();
   }));
+  function renderSpecs(){
+    const look = cfg.specs.look || "ticker";
+    document.querySelectorAll("#specLooks .lk").forEach(b => b.setAttribute("aria-pressed", b.dataset.look === look ? "true" : "false"));
+    $("specSpeed").style.display = look === "ticker" ? "" : "none";
+    $("specEach").style.display = look === "card" ? "" : "none";
+    $("spdOut").textContent = cfg.specs.speed;
+    const box = $("specItems"); box.innerHTML = "";
+    cfg.specs.items.forEach((x, i) => {
+      const row = document.createElement("div"); row.className = "social spec-row"; row.dataset.spec = i;
+      row.innerHTML = '<div class="phead"><input type="text" class="sl" placeholder="Part, e.g. GPU" aria-label="Part" style="max-width:150px"><input type="text" class="sv" placeholder="e.g. RTX 4070 Super" aria-label="Model"><button class="x" type="button" aria-label="Remove part">&times;</button></div>';
+      const [l, v] = row.querySelectorAll("input");
+      l.value = x.label || ""; v.value = x.value || "";
+      l.addEventListener("input", () => { x.label = l.value; changed(); });
+      v.addEventListener("input", () => { x.value = v.value; changed(); });
+      row.querySelector(".x").addEventListener("click", () => { cfg.specs.items.splice(i, 1); renderSpecs(); changed(); });
+      box.append(row);
+    });
+  }
+  document.querySelectorAll("#specLooks .lk").forEach(b => b.addEventListener("click", () => { cfg.specs.look = b.dataset.look; renderSpecs(); changed(); }));
+  $("addSpec").addEventListener("click", () => { cfg.specs.items.push({ label: "", value: "" }); renderSpecs(); changed(); const r = document.querySelectorAll("#specItems .sl"); if (r.length) r[r.length - 1].focus(); });
+  document.querySelector('input[data-k="specs.speed"]').addEventListener("input", e => $("spdOut").textContent = e.target.value);
+  renderSpecs();
+
   function renderSocials(){
     updateLooks();
     const box = $("socials"); box.innerHTML = "";
@@ -1419,8 +1561,9 @@ function startStudio(){
   /* links: each one carries this setup's settings */
   const base = location.href.split("#")[0];
   const APP_NAMES = { obs: "OBS", streamlabs: "Streamlabs" };
-  const appName = () => STORE.active === "tiktok" ? "TikTok LIVE Studio" : APP_NAMES[STORE.app || "obs"];
+  const appName = () => DESKTOP ? "TikTok LIVE Studio, OBS or Streamlabs" : STORE.active === "tiktok" ? "TikTok LIVE Studio" : APP_NAMES[STORE.app || "obs"];
   const linkFor = (key, data) => {
+    if (DESKTOP) return location.origin + "/overlay/" + key;
     const h = "#" + (STORE.active === "tiktok" ? "tiktok-" : "") + key + "&s=" + data;
     if (location.protocol === "file:" && STORE.active !== "tiktok" && (STORE.app || "obs") === "obs"){
       let p = base.replace(/^file:\/\//, "");
@@ -1436,6 +1579,7 @@ function startStudio(){
     document.querySelectorAll(".linklabel").forEach(l => l.textContent = "Link for " + appName());
     document.querySelectorAll("[data-copy]").forEach(b => b.disabled = !realPage);
     if (!realPage){ Object.keys(PIECES).forEach(k => $("url-" + k).value = "Open Overlaya Studio in Chrome to get this link"); return; }
+    if (DESKTOP){ Object.keys(PIECES).forEach(k => $("url-" + k).value = linkFor(k)); return; }
     const data = await packCfg(linkCfg(cfg));
     if (t !== linkTick) return;
     Object.keys(PIECES).forEach(k => $("url-" + k).value = linkFor(k, data));
@@ -1444,6 +1588,11 @@ function startStudio(){
   const persist = () => {
     clearTimeout(persistTimer);
     persistTimer = setTimeout(() => {
+      if (DESKTOP){
+        const copy = Object.assign({}, STORE); delete copy.logos;
+        fetch("/api/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(copy) }).catch(() => {});
+        return;
+      }
       try {
         const copy = Object.assign({}, STORE, { logos: undefined });
         localStorage.setItem(LS_KEY, JSON.stringify(copy));
@@ -1472,7 +1621,7 @@ function startStudio(){
   };
   const switchTo = key => {
     STORE.active = key; cfg = STORE.profiles[key];
-    showProfile(); refreshInputs(); renderSocials(); renderRoles(); renderTriggers(); fillLinks(); rebuild();
+    showProfile(); refreshInputs(); renderSocials(); renderSpecs(); renderRoles(); renderTriggers(); fillLinks(); rebuild();
     ttPanel();
   };
   document.querySelectorAll('input[name="profile"]').forEach(r => r.addEventListener("change", () => switchTo(r.value)));
@@ -1525,7 +1674,7 @@ function startStudio(){
         ttHint(e.code === 4404 || e.code === 4005 ? "Start your LIVE in TikTok LIVE Studio. This keeps checking every 15 seconds."
           : e.code === 4401 ? "Check the connection key, or clear it to try without one."
           : e.code === 4429 ? "Too many overlays or windows are connected at once. Close extras, then try again in a minute."
-          : e.code === 4400 ? "Double-check your TikTok username." : "Reconnecting...");
+          : e.code === 4400 ? (String(cfg.tiktok.key || "").trim() ? "Double-check your TikTok username and connection key." : "A connection key is needed. Get a free one at eulerstream.com and paste it in the Connection key box above.") : "Reconnecting...");
         if (!c.wait){ ttStop(true); return; }
         ttRetry = setTimeout(ttOpen, c.wait); return;
       }
@@ -1535,6 +1684,7 @@ function startStudio(){
     };
   }
   $("ttBtn").addEventListener("click", () => {
+    if (DESKTOP){ desktopToggle(); return; }
     if (ttOn){ ttStop(); return; }
     ttOn = true; ttCount = 0;
     $("ttBtn").textContent = "Disconnect"; $("ttBtn").classList.add("on");
@@ -1548,6 +1698,46 @@ function startStudio(){
     if (!show && ttOn) ttStop();
   }
   ttPanel();
+
+  /* desktop app: the app itself holds the TikTok connection */
+  let dState = "idle";
+  function desktopStatus(st){
+    dState = st.state;
+    const live = st.state === "live";
+    const app = { idle: ["", "Not checked"], connecting: ["wait", "Connecting"], waiting: ["ok", "Ready"], live: ["ok", "Connected"], error: ["bad", "Problem"] }[st.state] || ["", ""];
+    ttSet("ttApp", app[0], app[1]);
+    ttSet("ttLive", live ? "ok" : st.state === "waiting" ? "wait" : "", live ? "Live, " + st.count + " event" + (st.count === 1 ? "" : "s") : st.state === "waiting" ? "Not live yet" : "Not connected");
+    ttHint(st.message || "");
+    const off = st.state === "idle" || st.state === "error";
+    $("ttBtn").textContent = off ? "Connect to LIVE" : "Disconnect";
+    $("ttBtn").classList.toggle("on", !off);
+  }
+  function desktopToggle(){
+    if (dState === "idle" || dState === "error"){
+      if (!String(cfg.tiktok.user || "").trim()){ ttHint("Type your TikTok username above first."); return; }
+      if (!cfg.tiktok.on){ cfg.tiktok.on = true; refreshInputs(); changed(); }
+      fetch("/api/connect", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ user: cfg.tiktok.user, key: cfg.tiktok.key }) });
+    } else fetch("/api/disconnect", { method: "POST" });
+  }
+  if (DESKTOP){
+    const listen = () => {
+      const w = new WebSocket("ws://" + location.host + "/events");
+      w.onmessage = e => { let m; try { m = JSON.parse(e.data); } catch (err) { return; } if (m.kind === "status") desktopStatus(m); };
+      w.onclose = () => setTimeout(listen, 2000);
+    };
+    listen();
+    document.querySelector(".profile-box").style.display = "none";
+    const keyIn = document.querySelector('input[data-k="tiktok.key"]');
+    if (keyIn){
+      keyIn.closest(".field").querySelector("span").textContent = "Connection key (optional)";
+      keyIn.placeholder = "Leave empty";
+      const note = keyIn.closest(".field").nextElementSibling;
+      if (note) note.textContent = "Not needed in the desktop app. Only add one if connecting keeps failing.";
+    }
+    const steps = document.querySelector(".steps");
+    if (steps) steps.innerHTML = "<b>How it works:</b> copy a link and add it to TikTok LIVE Studio (Add source, then Link) or to OBS or Streamlabs (Browser source), at the size shown. "
+      + "<b>Your links never change.</b> Edits you make here appear on stream by themselves. Keep Overlaya Studio open while you're live.";
+  }
   document.querySelectorAll("[data-copy]").forEach(b => b.addEventListener("click", async () => {
     const inp = $("url-" + b.dataset.copy);
     try { await navigator.clipboard.writeText(inp.value); }
@@ -1563,7 +1753,7 @@ function startStudio(){
 
   async function save(){
     const json = JSON.stringify(STORE, null, 2).replace(/</g, "\\u003c");
-    const out = SOURCE.replace(/(<script type="application\/json" id="cfg">)[\s\S]*?(<\/script>)/, (m, a, b) => a + "\n" + json + "\n" + b);
+    const out = SOURCE.replace(/<script id="ovdesk">[\s\S]*?<\/script>\n?/, "").replace(/(<script type="application\/json" id="cfg">)[\s\S]*?(<\/script>)/, (m, a, b) => a + "\n" + json + "\n" + b);
     const download = () => {
       const a = document.createElement("a");
       a.href = URL.createObjectURL(new Blob([out], { type: "text/html" }));
